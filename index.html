@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>인지 마스터 - 기하학 복합도형</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #27ae60; --bg: #f5f6fa; }
+        body { font-family: 'Pretendard', sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .header { text-align: center; margin-bottom: 20px; }
+        #status { font-size: 1.1rem; font-weight: bold; color: var(--primary); margin: 10px 0; }
+        .game-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 1100px; }
+        .canvas-container { background: white; padding: 15px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
+        .canvas-label { font-weight: bold; margin-bottom: 10px; color: #7f8c8d; display: flex; justify-content: space-between; align-items: center; }
+        canvas { background: #fff; border: 2px solid var(--primary); border-radius: 12px; touch-action: none; max-width: 100%; }
+        .controls { margin-top: 30px; display: flex; gap: 15px; }
+        button { padding: 14px 28px; border: none; border-radius: 12px; background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.3s; font-size: 16px; }
+        button:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        button.accent { background: var(--accent); }
+        button.secondary { background: #95a5a6; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>복합 기하학 도형 훈련</h1>
+    <div id="status">새 문제 버튼을 눌러 도형을 생성하세요</div>
+</div>
+
+<div class="game-wrapper">
+    <div class="canvas-container">
+        <div class="canvas-label"><span id="target-label">[ 문제 도안 ]</span></div>
+        <canvas id="targetCanvas" width="450" height="450"></canvas>
+    </div>
+    <div class="canvas-container">
+        <div class="canvas-label">
+            <span>[ 나의 답안 ]</span>
+            <button onclick="clearUserCanvas()" style="padding:4px 10px; font-size:11px;" class="secondary">전체 지우기</button>
+        </div>
+        <canvas id="userCanvas" width="450" height="450"></canvas>
+    </div>
+</div>
+
+<div class="controls">
+    <button onclick="initNewGame()" class="accent">새 문제 생성</button>
+    <button onclick="toggleVisibility()" class="secondary">도안 숨기기 / 보이기</button>
+</div>
+
+<script>
+    const tCanvas = document.getElementById('targetCanvas');
+    const uCanvas = document.getElementById('userCanvas');
+    const tCtx = tCanvas.getContext('2d');
+    const uCtx = uCanvas.getContext('2d');
+    let isDrawing = false;
+
+    // 다각형 꼭짓점 좌표 계산
+    function getPolygonPoints(x, y, radius, sides) {
+        const points = [];
+        const rotation = -Math.PI/2; // 삼각형 등이 위를 향하도록 회전
+        for (let i = 0; i < sides; i++) {
+            const angle = rotation + (i * 2 * Math.PI) / sides;
+            points.push({ x: x + radius * Math.cos(angle), y: y + radius * Math.sin(angle) });
+        }
+        return points;
+    }
+
+    // 문제 도형 생성 함수
+    function drawRandomFigure() {
+        tCtx.clearRect(0, 0, 450, 450);
+        tCtx.strokeStyle = '#2c3e50';
+        tCtx.lineWidth = 2.5;
+        tCtx.lineCap = 'round';
+        const m = 225; // 캔버스 중심
+        
+        // 1. 기본 다각형 뼈대 무작위 선택
+        const sideOptions = [3, 4, 5, 6, 8]; // 삼각형, 사각형, 오각형, 육각형, 팔각형
+        const sides = sideOptions[Math.floor(Math.random() * sideOptions.length)];
+        const radius = 150;
+        const pts = getPolygonPoints(m, m, radius, sides);
+
+        document.getElementById('target-label').innerText = `[ 문제 도안: ${sides}각형 기반 ]`;
+
+        // 2. 외곽선 그리기
+        tCtx.beginPath();
+        tCtx.moveTo(pts[0].x, pts[0].y);
+        pts.forEach(p => tCtx.lineTo(p.x, p.y));
+        tCtx.closePath();
+        tCtx.stroke();
+
+        // 3. 내부 레이어 그리기 (무작위 직선 연결)
+        tCtx.beginPath();
+        pts.forEach((p, i) => {
+            // 중심점과 연결
+            if(Math.random() > 0.4) {
+                tCtx.moveTo(m, m);
+                tCtx.lineTo(p.x, p.y);
+            }
+            // 건너뛰어 연결 (대각선/현)
+            if(Math.random() > 0.5) {
+                const targetIdx = (i + 2) % sides;
+                tCtx.moveTo(p.x, p.y);
+                tCtx.lineTo(pts[targetIdx].x, pts[targetIdx].y);
+            }
+        });
+        tCtx.stroke();
+
+        // 4. 외부 부착물 그리기 (반원 제거됨)
+        pts.forEach((p, i) => {
+            if(Math.random() > 0.6) {
+                const nextP = pts[(i + 1) % sides];
+                const midX = (p.x + nextP.x) / 2;
+                const midY = (p.y + nextP.y) / 2;
+                // 변의 법선 벡터 각도 계산
+                const angle = Math.atan2(nextP.y - p.y, nextP.x - p.x) - Math.PI/2;
+
+                tCtx.save();
+                tCtx.translate(midX, midY);
+                tCtx.rotate(angle);
+                // 반원을 제외한 다른 형태 선택 (사각형 날개, 안테나 선)
+                const type = Math.floor(Math.random() * 2); // 0 또는 1
+                if(type === 0) { 
+                    // 사각형 날개
+                    tCtx.strokeRect(-15, -20, 30, 20);
+                } else { 
+                    // 안테나선
+                    tCtx.moveTo(0, 0); tCtx.lineTo(0, -25);
+                    tCtx.moveTo(-8, -15); tCtx.lineTo(8, -15);
+                }
+                tCtx.restore();
+            }
+        });
+
+        // 5. 중앙 특별 기호 그리기 (직선과 완전한 원 조합)
+        if(Math.random() > 0.5) {
+            tCtx.beginPath();
+            // 완전한 원
+            tCtx.arc(m, m, 20, 0, Math.PI*2);
+            // 십자선
+            tCtx.moveTo(m-15, m); tCtx.lineTo(m+15, m);
+            tCtx.moveTo(m, m-15); tCtx.lineTo(m, m+15);
+            tCtx.stroke();
+        }
+    }
+
+    function initNewGame() {
+        drawRandomFigure();
+        clearUserCanvas();
+        tCanvas.style.visibility = "visible";
+        document.getElementById('status').innerText = "새로운 기하학 패턴이 생성되었습니다.";
+        setupDrawing();
+    }
+
+    function toggleVisibility() {
+        const isHidden = tCanvas.style.visibility === "hidden";
+        tCanvas.style.visibility = isHidden ? "visible" : "hidden";
+        document.getElementById('status').innerText = isHidden ? "도안을 참고하세요." : "도안이 숨겨졌습니다. 기억력 테스트 모드!";
+    }
+
+    function setupDrawing() {
+        uCtx.lineWidth = 2.5; uCtx.lineCap = 'round'; uCtx.strokeStyle = '#2c3e50';
+        const getPos = (e) => {
+            const rect = uCanvas.getBoundingClientRect();
+            const scaleX = uCanvas.width / rect.width;
+            const scaleY = uCanvas.height / rect.height;
+            return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+        };
+        const start = (e) => { isDrawing = true; const {x, y} = getPos(e); uCtx.beginPath(); uCtx.moveTo(x, y); };
+        const move = (e) => { if(!isDrawing) return; const {x, y} = getPos(e); uCtx.lineTo(x, y); uCtx.stroke(); };
+        const stop = () => isDrawing = false;
+        uCanvas.onmousedown = start; uCanvas.onmousemove = move; window.onmouseup = stop;
+        uCanvas.ontouchstart = (e) => { e.preventDefault(); start(e.touches[0]); };
+        uCanvas.ontouchmove = (e) => { e.preventDefault(); move(e.touches[0]); };
+        uCanvas.ontouchend = stop;
+    }
+
+    function clearUserCanvas() { uCtx.clearRect(0, 0, 450, 450); }
+</script>
+</body>
+</html>
