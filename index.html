@@ -3,47 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>인지 마스터 - 기하학 복합도형</title>
+    <title> 복합도형 v2.63</title>
     <style>
-        :root { --primary: #2c3e50; --accent: #27ae60; --bg: #f5f6fa; }
-        body { font-family: 'Pretendard', sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .header { text-align: center; margin-bottom: 20px; }
-        #status { font-size: 1.1rem; font-weight: bold; color: var(--primary); margin: 10px 0; }
+        :root { --primary: #2c3e50; --accent: #27ae60; --bg: #f5f6fa; --danger: #e74c3c; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .header { text-align: center; margin-bottom: 15px; }
+        #status { font-size: 1.1rem; font-weight: bold; color: var(--primary); margin: 8px 0; min-height: 24px; text-align: center; max-width: 800px; }
+        
         .game-wrapper { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 1100px; }
         .canvas-container { background: white; padding: 15px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
-        .canvas-label { font-weight: bold; margin-bottom: 10px; color: #7f8c8d; display: flex; justify-content: space-between; align-items: center; }
-        canvas { background: #fff; border: 2px solid var(--primary); border-radius: 12px; touch-action: none; max-width: 100%; }
-        .controls { margin-top: 30px; display: flex; gap: 15px; }
-        button { padding: 14px 28px; border: none; border-radius: 12px; background: var(--primary); color: white; font-weight: bold; cursor: pointer; transition: 0.3s; font-size: 16px; }
-        button:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
-        button.accent { background: var(--accent); }
-        button.secondary { background: #95a5a6; }
+        .canvas-label { font-weight: bold; margin-bottom: 10px; color: #7f8c8d; display: flex; justify-content: space-between; align-items: center; min-height: 30px; }
+        
+        canvas { background: #ffffff; border: 3px solid #2c3e50; border-radius: 12px; touch-action: none; display: block; margin: 0 auto; max-width: 100%; height: auto; }
+        
+        .controls { margin-top: 25px; display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
+        button { padding: 14px 24px; border: none; border-radius: 12px; background: var(--primary); color: white; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.2s; }
+        button:active { opacity: 0.8; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h1>복합 기하학 도형 훈련</h1>
-    <div id="status">새 문제 버튼을 눌러 도형을 생성하세요</div>
+    <h1>임상 규격 복합도형 인지 훈련 v2.63</h1>
+    <div id="status">아래 [새 문제 시작] 버튼을 누르면 도안이 즉시 나타납니다.</div>
 </div>
 
 <div class="game-wrapper">
-    <div class="canvas-container">
-        <div class="canvas-label"><span id="target-label">[ 문제 도안 ]</span></div>
+    <div class="canvas-container" id="target-box">
+        <div class="canvas-label"><span id="target-label">[ 임상 평가 도안 ]</span></div>
         <canvas id="targetCanvas" width="450" height="450"></canvas>
     </div>
-    <div class="canvas-container">
+    
+    <div class="canvas-container" id="user-box">
         <div class="canvas-label">
-            <span>[ 나의 답안 ]</span>
-            <button onclick="clearUserCanvas()" style="padding:4px 10px; font-size:11px;" class="secondary">전체 지우기</button>
+            <span id="user-label">[ 나의 답안: 모사 대기 중 ]</span>
+            <button onclick="clearUserCanvas()" id="btn-clear" style="padding:4px 10px; font-size:11px; display:none; background:#95a5a6;">지우기</button>
         </div>
         <canvas id="userCanvas" width="450" height="450"></canvas>
     </div>
 </div>
 
 <div class="controls">
-    <button onclick="initNewGame()" class="accent">새 문제 생성</button>
-    <button onclick="toggleVisibility()" class="secondary">도안 숨기기 / 보이기</button>
+    <button onclick="startCopyPhase()" id="btn-start" style="background: var(--accent);">새 문제 시작 (1단계: 모사)</button>
+    <button onclick="startRecallPhase()" id="btn-recall" style="display:none; background:#3498db;">도안 숨기기 (2단계: 기억 회상)</button>
+    <button onclick="showComparison()" id="btn-done" style="display:none; background: var(--danger);">훈련 완료 (도안 대조)</button>
 </div>
 
 <script>
@@ -51,12 +54,23 @@
     const uCanvas = document.getElementById('userCanvas');
     const tCtx = tCanvas.getContext('2d');
     const uCtx = uCanvas.getContext('2d');
+    
     let isDrawing = false;
+    let currentMode = "ready"; 
 
-    // 다각형 꼭짓점 좌표 계산
+    // [핵심 수정] DOM 구조가 완전히 로드된 후 드로잉 엔진을 안전하게 초기화합니다.
+    window.addEventListener('DOMContentLoaded', function() {
+        setupDrawing();
+        
+        // 초기 대기 화면 가이드선 드로잉
+        tCtx.strokeStyle = '#e0e0e0';
+        tCtx.lineWidth = 1;
+        tCtx.strokeRect(10, 10, 430, 430);
+    });
+
     function getPolygonPoints(x, y, radius, sides) {
         const points = [];
-        const rotation = -Math.PI/2; // 삼각형 등이 위를 향하도록 회전
+        const rotation = -Math.PI/2;
         for (let i = 0; i < sides; i++) {
             const angle = rotation + (i * 2 * Math.PI) / sides;
             points.push({ x: x + radius * Math.cos(angle), y: y + radius * Math.sin(angle) });
@@ -64,113 +78,182 @@
         return points;
     }
 
-    // 문제 도형 생성 함수
-    function drawRandomFigure() {
+    function drawClinicalComplexFigure() {
         tCtx.clearRect(0, 0, 450, 450);
-        tCtx.strokeStyle = '#2c3e50';
-        tCtx.lineWidth = 2.5;
+        tCtx.strokeStyle = '#1a252f';
+        tCtx.lineWidth = 3;
         tCtx.lineCap = 'round';
-        const m = 225; // 캔버스 중심
-        
-        // 1. 기본 다각형 뼈대 무작위 선택
-        const sideOptions = [3, 4, 5, 6, 8]; // 삼각형, 사각형, 오각형, 육각형, 팔각형
-        const sides = sideOptions[Math.floor(Math.random() * sideOptions.length)];
-        const radius = 150;
-        const pts = getPolygonPoints(m, m, radius, sides);
+        tCtx.lineJoin = 'round';
 
-        document.getElementById('target-label').innerText = `[ 문제 도안: ${sides}각형 기반 ]`;
+        const cX = 225, cY = 225;
+        const w = 280, h = 180;
+        const left = cX - w/2, right = cX + w/2;
+        const top = cY - h/2, bottom = cY + h/2;
 
-        // 2. 외곽선 그리기
+        const currentSides = [3, 4, 5, 6, 8][Math.floor(Math.random() * 5)];
+        const radius = 140;
+        const pts = getPolygonPoints(cX, cY, radius, currentSides);
+
+        document.getElementById('target-label').innerText = `[ 임상 평가 도안 ]`;
+
+        tCtx.strokeRect(left, top, w, h);
+
         tCtx.beginPath();
-        tCtx.moveTo(pts[0].x, pts[0].y);
-        pts.forEach(p => tCtx.lineTo(p.x, p.y));
-        tCtx.closePath();
+        tCtx.moveTo(left, cY); tCtx.lineTo(right, cY);
+        tCtx.moveTo(cX, top);  tCtx.lineTo(cX, bottom);
+        tCtx.moveTo(left, top); tCtx.lineTo(right, bottom);
+        tCtx.moveTo(left, bottom); tCtx.lineTo(right, top);
         tCtx.stroke();
 
-        // 3. 내부 레이어 그리기 (무작위 직선 연결)
         tCtx.beginPath();
-        pts.forEach((p, i) => {
-            // 중심점과 연결
-            if(Math.random() > 0.4) {
-                tCtx.moveTo(m, m);
-                tCtx.lineTo(p.x, p.y);
-            }
-            // 건너뛰어 연결 (대각선/현)
-            if(Math.random() > 0.5) {
-                const targetIdx = (i + 2) % sides;
-                tCtx.moveTo(p.x, p.y);
-                tCtx.lineTo(pts[targetIdx].x, pts[targetIdx].y);
-            }
-        });
-        tCtx.stroke();
-
-        // 4. 외부 부착물 그리기 (반원 제거됨)
-        pts.forEach((p, i) => {
-            if(Math.random() > 0.6) {
-                const nextP = pts[(i + 1) % sides];
-                const midX = (p.x + nextP.x) / 2;
-                const midY = (p.y + nextP.y) / 2;
-                // 변의 법선 벡터 각도 계산
-                const angle = Math.atan2(nextP.y - p.y, nextP.x - p.x) - Math.PI/2;
-
-                tCtx.save();
-                tCtx.translate(midX, midY);
-                tCtx.rotate(angle);
-                // 반원을 제외한 다른 형태 선택 (사각형 날개, 안테나 선)
-                const type = Math.floor(Math.random() * 2); // 0 또는 1
-                if(type === 0) { 
-                    // 사각형 날개
-                    tCtx.strokeRect(-15, -20, 30, 20);
-                } else { 
-                    // 안테나선
-                    tCtx.moveTo(0, 0); tCtx.lineTo(0, -25);
-                    tCtx.moveTo(-8, -15); tCtx.lineTo(8, -15);
-                }
-                tCtx.restore();
-            }
-        });
-
-        // 5. 중앙 특별 기호 그리기 (직선과 완전한 원 조합)
+        if(Math.random() > 0.3) { tCtx.moveTo(left, top + h/4); tCtx.lineTo(cX, top + h/4); }
+        if(Math.random() > 0.3) { tCtx.moveTo(cX + w/4, cY); tCtx.lineTo(cX + w/4, bottom); }
+        if(Math.random() > 0.4) { tCtx.strokeRect(cX - 30, cY - 30, 60, 60); }
         if(Math.random() > 0.5) {
-            tCtx.beginPath();
-            // 완전한 원
-            tCtx.arc(m, m, 20, 0, Math.PI*2);
-            // 십자선
-            tCtx.moveTo(m-15, m); tCtx.lineTo(m+15, m);
-            tCtx.moveTo(m, m-15); tCtx.lineTo(m, m+15);
-            tCtx.stroke();
+            for(let i=1; i<=3; i++) {
+                tCtx.moveTo(left + (w/8)*i, top); 
+                tCtx.lineTo(left + (w/8)*i + 20, cY);
+            }
         }
+        tCtx.stroke();
+
+        tCtx.beginPath();
+        if(Math.random() > 0.5) {
+            tCtx.moveTo(left, top); tCtx.lineTo(cX, top - 60); tCtx.lineTo(right, top);
+        } else {
+            tCtx.moveTo(left, bottom); tCtx.lineTo(cX, bottom + 60); tCtx.lineTo(right, bottom);
+        }
+        tCtx.moveTo(right, top); tCtx.lineTo(right + 50, cY); tCtx.lineTo(right, bottom);
+        
+        if(Math.random() > 0.5) {
+            tCtx.moveTo(left - 30, top + 40); tCtx.lineTo(left, top + 40);
+            tCtx.moveTo(left - 40, cY);       tCtx.lineTo(left, cY);
+            tCtx.moveTo(left - 30, bottom - 40); tCtx.lineTo(left, bottom - 40);
+        } else {
+            tCtx.arc(left, cY, 35, -Math.PI/2, Math.PI/2, true);
+        }
+        tCtx.stroke();
+
+        tCtx.beginPath();
+        if(Math.random() > 0.4) { tCtx.arc(right - 40, top + 40, 15, 0, Math.PI*2); }
+        if(Math.random() > 0.5) {
+            tCtx.moveTo(left + 30, bottom + 25); tCtx.lineTo(left + 50, bottom + 25);
+            tCtx.moveTo(left + 40, bottom + 15); tCtx.lineTo(left + 40, bottom + 35);
+        }
+        if(Math.random() > 0.4) { tCtx.moveTo(left, top); tCtx.lineTo(left - 30, top - 30); }
+        tCtx.stroke();
     }
 
-    function initNewGame() {
-        drawRandomFigure();
-        clearUserCanvas();
+    function startCopyPhase() {
+        currentMode = "copy";
+        
+        document.getElementById('target-box').style.display = "block";
         tCanvas.style.visibility = "visible";
-        document.getElementById('status').innerText = "새로운 기하학 패턴이 생성되었습니다.";
-        setupDrawing();
+        document.getElementById('btn-clear').style.display = "inline-block";
+        
+        document.getElementById('user-label').innerText = "[ 나의 답안: 1단계 모사 중 ]";
+        document.getElementById('status').innerText = "👀 [1단계 모사] 왼쪽 도안을 우측 창에 똑같이 그려보세요.";
+        
+        drawClinicalComplexFigure();
+        clearUserCanvas();
+        
+        document.getElementById('btn-recall').style.display = "inline-block";
+        document.getElementById('btn-done').style.display = "none";
     }
 
-    function toggleVisibility() {
-        const isHidden = tCanvas.style.visibility === "hidden";
-        tCanvas.style.visibility = isHidden ? "visible" : "hidden";
-        document.getElementById('status').innerText = isHidden ? "도안을 참고하세요." : "도안이 숨겨졌습니다. 기억력 테스트 모드!";
+    function startRecallPhase() {
+        if(currentMode !== "copy") return;
+        currentMode = "recall";
+        
+        tCanvas.style.visibility = "hidden";
+        document.getElementById('target-box').style.display = "none";
+        
+        document.getElementById('user-label').innerText = "[ 나의 답안: 2단계 회상 중 ]";
+        document.getElementById('status').innerText = "🧠 [2단계 회상] 도안이 완전히 숨겨졌습니다! 오직 기억만으로 복원하세요.";
+        
+        clearUserCanvas();
+        
+        document.getElementById('btn-recall').style.display = "none";
+        document.getElementById('btn-done').style.display = "inline-block";
+    }
+
+    function showComparison() {
+        if(currentMode !== "recall") return;
+        currentMode = "ready";
+        
+        document.getElementById('target-box').style.display = "block";
+        tCanvas.style.visibility = "visible";
+        
+        document.getElementById('user-label').innerText = "[ 내가 기억해서 그린 답안 ]";
+        document.getElementById('target-label').innerText = "[ 정답 도안 ]";
+        
+        document.getElementById('status').innerText = "🏁 완료! 왼쪽 원본과 오른쪽 복원본을 눈으로 직접 대조해 보세요.";
+        
+        document.getElementById('btn-done').style.display = "none";
+        document.getElementById('btn-clear').style.display = "none";
     }
 
     function setupDrawing() {
-        uCtx.lineWidth = 2.5; uCtx.lineCap = 'round'; uCtx.strokeStyle = '#2c3e50';
+        uCtx.lineWidth = 3; 
+        uCtx.lineCap = 'round'; 
+        uCtx.lineJoin = 'round'; 
+        uCtx.strokeStyle = '#1a252f';
+
         const getPos = (e) => {
             const rect = uCanvas.getBoundingClientRect();
-            const scaleX = uCanvas.width / rect.width;
-            const scaleY = uCanvas.height / rect.height;
-            return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+            let clientX = e.clientX;
+            let clientY = e.clientY;
+            
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else if (e.changedTouches && e.changedTouches.length > 0) {
+                clientX = e.changedTouches[0].clientX;
+                clientY = e.changedTouches[0].clientY;
+            }
+            
+            return { 
+                x: (clientX - rect.left) * (uCanvas.width / rect.width), 
+                y: (clientY - rect.top) * (uCanvas.height / rect.height) 
+            };
         };
-        const start = (e) => { isDrawing = true; const {x, y} = getPos(e); uCtx.beginPath(); uCtx.moveTo(x, y); };
-        const move = (e) => { if(!isDrawing) return; const {x, y} = getPos(e); uCtx.lineTo(x, y); uCtx.stroke(); };
-        const stop = () => isDrawing = false;
-        uCanvas.onmousedown = start; uCanvas.onmousemove = move; window.onmouseup = stop;
-        uCanvas.ontouchstart = (e) => { e.preventDefault(); start(e.touches[0]); };
-        uCanvas.ontouchmove = (e) => { e.preventDefault(); move(e.touches[0]); };
-        uCanvas.ontouchend = stop;
+
+        const start = (e) => { 
+            isDrawing = true; 
+            const {x, y} = getPos(e); 
+            uCtx.beginPath(); 
+            uCtx.moveTo(x, y); 
+        };
+        
+        const move = (e) => { 
+            if(!isDrawing) return; 
+            const {x, y} = getPos(e); 
+            uCtx.lineTo(x, y); 
+            uCtx.stroke(); 
+        };
+        
+        const stop = () => { isDrawing = false; };
+        
+        // 데스크톱 마우스 이벤트 핸들러
+        uCanvas.onmousedown = start; 
+        uCanvas.onmousemove = move; 
+        window.onmouseup = stop;
+        
+        // [핵심 수정] 터치 디바이스 무조건 작동 보장 및 스크롤 가두기 선언
+        uCanvas.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            start(e);
+        }, { passive: false });
+        
+        uCanvas.addEventListener('touchmove', function(e) { 
+            e.preventDefault(); 
+            move(e); 
+        }, { passive: false });
+        
+        uCanvas.addEventListener('touchend', function(e) { 
+            e.preventDefault();
+            stop(); 
+        }, { passive: false });
     }
 
     function clearUserCanvas() { uCtx.clearRect(0, 0, 450, 450); }
